@@ -646,6 +646,42 @@ func (s *Server) addBadge(w *responseWriter, r *request) error {
 	return w.writeJSON(user.Badges)
 }
 
+func (s *Server) getHiddenPosts(w *responseWriter, r *request) error {
+	if !r.loggedIn {
+		return errNotLoggedIn
+	}
+
+	user, err := core.GetUser(r.ctx, s.db, *r.viewer, nil)
+	if err != nil {
+		return err
+	}
+
+	query := r.urlQueryParams()
+
+	limit, err := getFeedLimit(query, s.config.PaginationLimit, s.config.PaginationLimitMax)
+	if err != nil {
+		return err
+	}
+
+	page := 1
+	if spage := query.Get("page"); spage != "" {
+		if page, err = strconv.Atoi(spage); err != nil {
+			return httperr.NewBadRequest("invalid_page", "Invalid page.")
+		}
+	}
+
+	response := struct {
+		Posts []*core.Post `json:"posts"`
+		Limit int          `json:"limit"`
+		Page  int          `json:"page"`
+	}{Limit: limit, Page: page}
+
+	if response.Posts, err = user.GetHiddenPosts(r.ctx, s.db, r.viewer, limit, page); err != nil {
+		return err
+	}
+	return w.writeJSON(response)
+}
+
 func (s *Server) handleHiddenPosts(w *responseWriter, r *request) error {
 	if !r.loggedIn {
 		return errNotLoggedIn

@@ -1153,6 +1153,32 @@ func (u *User) RemoveBadge(db *sql.DB, id int) error {
 	return err
 }
 
+func (u *User) GetHiddenPosts(ctx context.Context, db *sql.DB, viewer *uid.ID, limit, page int) ([]*Post, error) {
+	query := "SELECT post_id FROM hidden_posts WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	rows, err := db.Query(query, viewer, limit, limit*(page-1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uid.ID
+	for rows.Next() {
+		id := uid.ID{}
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return []*Post{}, nil
+	}
+	posts, err := GetPostsByIDs(ctx, db, viewer, true, ids...)
+	return posts, nil
+}
+
 func (u *User) HidePost(ctx context.Context, db *sql.DB, postID uid.ID) error {
 	return msql.Transact(ctx, db, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO hidden_posts (user_id, post_id) VALUES (?, ?)", u.ID, postID); err != nil {
